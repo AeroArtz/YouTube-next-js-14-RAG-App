@@ -1,0 +1,84 @@
+import { NextResponse } from "next/server";
+import { getXataClient } from "@/xata";
+import { authorized } from "@/utils/auth";
+import { XataVectorSearch } from "@langchain/community/vectorstores/xata";
+import { WebPDFLoader } from "@langchain/community/document_loaders/web/pdf";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
+import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
+import { MultiFileLoader } from "langchain/document_loaders/fs/multi_file";
+
+
+export async function GET(req) {
+	try {
+        
+
+    // SINGLE PDF DOCUMENT - STORED LOCALLY
+
+    // MULTIPLE PDF DOCUMENTS - STORED LOCALLY
+
+    // SINGLE PDF DOCUMENT - STORED EXTERNALLY
+
+    // READ file data 
+
+    // MULTIPLE PDF DOCUMENTS - STORED EXTERNALLY
+
+
+
+		const xata = getXataClient();
+
+        const source = await xata.db.Knowledge_Base.filter({
+            user: user.id,
+          }).getAll();
+        
+          let blobs = []
+        
+          for (let i = 0; i < source.length; i++) {
+            const file = await xata.files.download({ table: "Knowledge_Base", column: "knowledge_base", record: source[i].id });
+            blobs.push(file);
+          }
+        
+          let docs = [];
+        
+          for (const blob of blobs) {
+            const loader = new WebPDFLoader(blob);
+            const doc = await loader.load();
+            docs = docs.concat(doc);
+          }
+    
+
+          const textSplitter = new RecursiveCharacterTextSplitter({
+            chunkSize: 1000,
+            chunkOverlap: 200,
+          });
+      
+          const splits = await textSplitter.splitDocuments(docs);
+
+          console.log(splits)
+
+          // pdf : JSON
+          // loc : JSON
+      
+          for (let i=0; i<splits.length; i++){
+            splits[i].pageContent = splits[i].pageContent.replace(/\n|\\n/g, "");
+           
+          }
+
+          const embeddings = new GoogleGenerativeAIEmbeddings({
+            apiKey : process.env.GEMINI_API_KEY,
+            model: "embedding-001", // 768 dimensions
+        })
+          const vectorStore = new XataVectorSearch(embeddings, { client:xata, table:"vectors" });
+
+          const ids = await vectorStore.addDocuments(docs);
+
+          return NextResponse.json({ msg: "Success" }, { status: 200 });
+    }
+
+        catch (err) {
+            console.error(err);
+            return NextResponse.json({ msg: "Unexpected error occurred" }, { status: 500 });
+    }
+
+
+}
